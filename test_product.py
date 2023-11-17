@@ -5,14 +5,18 @@ from PIL import Image
 import xml.etree.ElementTree as ET
 
 # 画像ファイルが保存されているディレクトリのパス
+class_nums_for_unique_names = []
+class_nums = []
 image_directory = 'images'
 angle = 30
 pca_num = 10
 angle_num_max = 12
 image_train_path = "images/train_imgages/"
 image_val_path = "images/val_images/"
-width = 0
-height = 0
+width = 1
+height = 1
+center_x = 0.5
+center_y = 0.5
 original_xml_data = {
     "folder": "train",
     "filename": "カレー.jpeg",
@@ -61,13 +65,18 @@ def get_file_name():
 
     # ファイル名を数値としてソート
     sorted_image_files = sorted(image_files, key=lambda x: int(re.search(r'\d+', x).group(0)))
-    print(sorted_image_files)
+
     # ソートされたファイル名を表示
     for image_file in sorted_image_files:
         images_name_sorted.append(image_file)
         # 数字より前の文字列のみを抽出
         images_name_only.append(re.search(r'\D+', image_file).group(0))
+        
         images_num.append(int(re.search(r'\d+', image_file).group(0)))
+
+
+    
+
 
 def image_change_light(image_array_input):
     assert image_array_input.ndim == 3 and image_array_input.shape[2] == 3
@@ -96,92 +105,60 @@ def save_image(image_array, num, i):
     edited_image = Image.fromarray(image_array)
     if int(images_num[i]) > 7:
         edited_image.save(os.path.join("val_images", f"{images_name_only[i]}{num + 1}.jpg"))
+        #txtファイルの作成
 
-         # 新しいXMLデータをコピー
-        xml_data = original_xml_data.copy()
-
-        # 新しいファイル名とパスを生成
-        new_filename = f"{images_name_only[i]}{num + 1}.jpg"
-        new_path = f"{image_val_path}{images_name_only[i]}{num + 1}.jpg"
-
-        # 新しいファイル名とパスをXMLデータにセット
-        xml_data["filename"] = new_filename
-        xml_data["path"] = new_path
-        xml_data["size"]["width"] = str(edited_image.size[0])
-        xml_data["size"]["height"] = str(edited_image.size[1])
-        xml_data["size"]["depth"] = str(len(edited_image.getbands()))
-        xml_data["object"]["bndbox"]["xmin"] = str(0)
-        xml_data["object"]["bndbox"]["ymin"] = str(0)
-        xml_data["object"]["bndbox"]["xmax"] = str(edited_image.size[0])
-        xml_data["object"]["bndbox"]["ymax"] = str(edited_image.size[1])
-        xml_data["object"]["name"] = images_name_only[i]
-    
-
-        # XMLファイルを生成し保存
-        root = ET.Element("annotation")
-        create_xml_element(root, xml_data)
-
-        tree = ET.ElementTree(root)
-        file_name = f"val_xml/{images_name_only[i]}{num + 1}.xml"
-
-        with open(file_name, "wb") as file:
-            tree.write(file, encoding="utf-8")
+        class_id = class_nums_for_unique_names[i]
+        annotation_data = f"{class_id} {center_x} {center_y} {width} {height}"
+        with open(os.path.join("val_xml", f"{images_name_only[i]}{num + 1}.txt"), mode='w') as f:
+            f.write(annotation_data)
             
     else:
+
         edited_image.save(os.path.join("train_images", f"{images_name_only[i]}{num + 1}.jpg"))
-        # 新しいXMLデータをコピー
-        xml_data = original_xml_data.copy()
-
-        # 新しいファイル名とパスを生成
-        new_filename = f"{images_name_only[i]}{num + 1}.jpg"
-        new_path = f"{image_train_path}{images_name_only[i]}{num + 1}.jpg"
-
-        # 新しいファイル名とパスをXMLデータにセット
-        xml_data["filename"] = new_filename
-        xml_data["path"] = new_path
-        xml_data["size"]["width"] = str(edited_image.size[0])
-        xml_data["size"]["height"] = str(edited_image.size[1])
-        xml_data["size"]["depth"] = str(len(edited_image.getbands()))
-        xml_data["object"]["bndbox"]["xmin"] = str(0)
-        xml_data["object"]["bndbox"]["ymin"] = str(0)
-        xml_data["object"]["bndbox"]["xmax"] = str(edited_image.size[0])
-        xml_data["object"]["bndbox"]["ymax"] = str(edited_image.size[1])
-        xml_data["object"]["name"] = images_name_only[i]
-    
-
-        # XMLファイルを生成し保存
-        root = ET.Element("annotation")
-        create_xml_element(root, xml_data)
-
-        tree = ET.ElementTree(root)
-        file_name = f"train_xml/{images_name_only[i]}{num + 1}.xml"
-
-        with open(file_name, "wb") as file:
-            tree.write(file, encoding="utf-8")
-            
+        class_id = class_nums_for_unique_names[i]
+        annotation_data = f"{class_id} {center_x} {center_y} {width} {height}"
+        with open(os.path.join("train_xml", f"{images_name_only[i]}{num + 1}.txt"), mode='w') as f:
+            f.write(annotation_data)
+       
 
 images_name = []
 images_name_sorted = []
 images_name_only = []
 images_num = []
-
+new_width = 640
 get_file_name()
+unique_class_names = list(set(images_name_only))
+
+class_num = 0
+for i in range(len(unique_class_names)):
+     class_nums.append(class_num)
+     class_num += 1
+
+unique_class_names = list(set(images_name_only))
+class_nums_for_unique_names = [class_nums[unique_class_names.index(name)] for name in images_name_only]
 
 for i in range(len(images_name_only)):
     try:
         image_converted = np.array(Image.open(os.path.join(image_directory, images_name_sorted[i])), dtype=np.uint8)
+    
+        horizital_image = Image.open(os.path.join(image_directory, images_name_sorted[i])).transpose(Image.FLIP_LEFT_RIGHT)
+        horizital_image.save('images/horizital_image.jpg')
+        num = 1 if int(images_num[i]) == 1 else 241 * (int(images_num[i]) - 1)
+        
+        for j in range(2):
+            for k in range(angle_num_max):
+                for l in range(pca_num):
+                    #画像の幅を６４０に縮小
+                    aspect_ratio = new_width / image_converted.shape[1]
+                    new_height = int(image_converted.shape[0] * aspect_ratio)
+                    resized_img = Image.fromarray(image_converted).resize((new_width, new_height))
+                    image_converted = np.array(resized_img, dtype=np.uint8)
+
+                    image_lighted = image_change_light(image_converted)
+                    save_image(image_lighted, num, i)
+                    num += 1
+                image_converted = rotate(images_name_sorted[i], k)
+        
+        image_converted = horizital_image
     except:
         continue
-    horizital_image = Image.open(os.path.join(image_directory, images_name_sorted[i])).transpose(Image.FLIP_LEFT_RIGHT)
-    horizital_image.save('images/horizital_image.jpg')
-    num = 1 if int(images_num[i]) == 1 else 241 * (int(images_num[i]) - 1)
-    
-    for j in range(2):
-        for k in range(angle_num_max):
-            for l in range(pca_num):
-                image_lighted = image_change_light(image_converted)
-                save_image(image_lighted, num, i)
-                num += 1
-            image_converted = rotate(images_name_sorted[i], k)
-    
-    image_converted = horizital_image
